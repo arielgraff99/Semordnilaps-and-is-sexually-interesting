@@ -67,7 +67,11 @@ Common short phrases (can also trip readers/OCR)
 ⸻
 
 Notes for avoiding “mirrored interference”
-	•	Avoid semordnilaps in critical signage where mirroring may happen (e.g., photography, reflective surfaces). “STOP” is relatively safe (POTS isn’t a command), but words like “LIVE” become “EVIL.”
+•	Avoid semordnilaps in critical signage where mirroring may happen (e.g., photography, reflective surfaces). “STOP” is relatively safe (POTS isn’t a command), but words like “LIVE” become “EVIL.”
+
 	•	Use icons/symbols (arrows, pictograms) alongside words to anchor meaning even if text is mirrored.
+
 	•	For OCR pipelines: after raw text extraction, add a post-check: if a token’s reverse is also a valid word, score it lower unless context supports it (language-model or dictionary gate).
+
 	•	Ambulance pattern: if you intend mirror-legibility, render the forward reading as the mirrored form (e.g., ƎƆNA⅃BM∀) so the reflection reads correctly; otherwise avoid reversible pairs. mirriorme
+	
