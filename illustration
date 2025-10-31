@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Interactive Visual Command Language — Brightness Direction</title>
+<script src="https://unpkg.com/blockly/blockly.min.js"></script>
+<style>
+  html, body {
+    height: 100%; margin: 0; background: #eef3ff;
+    display: flex; flex-direction: column;
+    font-family: system-ui, sans-serif;
+  }
+  #legend {
+    display:flex; justify-content:center; align-items:center;
+    gap:40px; padding:12px 0;
+    background:#ffffffee; border-bottom:1px solid #ccc;
+    user-select:none;
+  }
+  .legendBox {
+    width:140px; height:60px; border-radius:10px;
+    box-shadow:0 2px 5px rgba(0,0,0,0.2); transition:background 0.6s;
+  }
+  #legendText { text-align:center; font-size:14px; color:#333; }
+  video { border-radius:8px; box-shadow:0 0 8px rgba(0,0,0,0.3); }
+  #top {
+    display:flex; align-items:center; justify-content:center;
+    gap:20px; padding:10px 0;
+    background:#f8fbff;
+  }
+  #blocklyDiv { flex:1; }
+  #output {
+    background:#fff; border-top:1px solid #ccc;
+    padding:10px; font-family:monospace;
+    height:160px; overflow-y:auto;
+  }
+</style>
+</head>
+<body>
+
+<!-- 🌗 Dynamic legend showing meaning through light flow -->
+<div id="legend">
+  <div style="text-align:center;">
+    <div id="legendNormal" class="legendBox"
+      style="background:linear-gradient(90deg,#ffffff 0%,#66cc66 100%);"></div>
+    <div id="legendText">Light ➜ Dark = “LIVE” (Normal)</div>
+  </div>
+  <div style="font-size:30px;">⇄</div>
+  <div style="text-align:center;">
+    <div id="legendMirror" class="legendBox"
+      style="background:linear-gradient(90deg,#66cc66 0%,#ffffff 100%);"></div>
+    <div id="legendText">Dark ➜ Light = “EVIL” (Mirrored)</div>
+  </div>
+</div>
+
+<!-- 🎥 Webcam feed that controls mirror logic -->
+<div id="top">
+  <video id="cam" width="200" height="150" autoplay muted></video>
+  <div>📷 Move a light source left/right — mirror flips when right side is brighter.</div>
+</div>
+
+<!-- 🧩 Blockly workspace -->
+<div id="blocklyDiv"></div>
+<div id="output">💡 Output log<br></div>
+
+<xml id="toolbox" style="display:none">
+  <block type="cmd_live"></block>
+  <block type="cmd_stop"></block>
+</xml>
+
+<script>
+const workspace = Blockly.inject('blocklyDiv', {
+  toolbox: document.getElementById('toolbox'),
+  trashcan: true,
+});
+
+let mirrorMode = false;
+
+/* === Brightness gradient === */
+function applyBrightness(block, lightFirst=true) {
+  const color = block.getColour();
+  const gradient = lightFirst
+    ? `linear-gradient(90deg,#ffffff 0%,${color} 100%)`
+    : `linear-gradient(90deg,${color} 0%,#ffffff 100%)`;
+  block.brightnessDirection = lightFirst ? "L2R" : "R2L";
+  block.svgPath_.style.fill = gradient;
+}
+
+/* === Blocks === */
+Blockly.Blocks['cmd_live'] = {
+  init: function() {
+    this.appendDummyInput().appendField("🟢 LIVE / EVIL");
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour("#66cc66");
+    applyBrightness(this,true);
+  }
+};
+Blockly.Blocks['cmd_stop'] = {
+  init: function() {
+    this.appendDummyInput().appendField("🛑 STOP / POTS");
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour("#ff9999");
+    applyBrightness(this,true);
+  }
+};
+Blockly.JavaScript['cmd_live'] = (b)=>`executeCommand('LIVE','${b.brightnessDirection}');\n`;
+Blockly.JavaScript['cmd_stop'] = (b)=>`executeCommand('STOP','${b.brightnessDirection}');\n`;
+
+/* === Runtime behavior === */
+function output(t){document.getElementById("output").innerHTML+=t+"<br>";}
+
+function executeCommand(cmd, direction){
+  const effective = mirrorMode ? (direction==="L2R"?"R2L":"L2R") : direction;
+  let meaning="";
+  if(cmd==="LIVE")
+    meaning = effective==="L2R" ? "🟢 Life support ON" : "🔴 Defense system triggered (EVIL)";
+  if(cmd==="STOP")
+    meaning = effective==="L2R" ? "🛑 Machine halted safely" : "⚙️ Product dispenser activated (POTS)";
+  output(`Command ${cmd} [${effective}] → ${meaning}`);
+}
+function runCode(){
+  document.getElementById("output").innerHTML="🚀 Running program...<br>";
+  eval(Blockly.JavaScript.workspaceToCode(workspace));
+}
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')runCode();});
+
+/* === Webcam brightness sensing === */
+const video=document.getElementById("cam");
+navigator.mediaDevices.getUserMedia({video:true})
+  .then(stream=>video.srcObject=stream)
+  .catch(()=>alert("Camera access denied. Brightness control disabled."));
+
+const canvas=document.createElement("canvas");
+const ctx=canvas.getContext("2d");
+
+setInterval(()=>{
+  if(video.readyState<2)return;
+  canvas.width=video.videoWidth;
+  canvas.height=video.videoHeight;
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const frame=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  let left=0,right=0;
+  for(let y=0;y<canvas.height;y++){
+    for(let x=0;x<canvas.width;x+=4){
+      const i=(y*canvas.width+x)*4;
+      const br=(frame[i]+frame[i+1]+frame[i+2])/3;
+      if(x<canvas.width/2)left+=br; else right+=br;
+    }
+  }
+  const bias=right-left;
+  const threshold=canvas.width*canvas.height*0.3;
+  const shouldMirror=bias>threshold;
+  if(shouldMirror!==mirrorMode) toggleMirrorMode(shouldMirror);
+},1000);
+
+function toggleMirrorMode(state){
+  mirrorMode=state;
+  workspace.getAllBlocks().forEach(b=>{
+    if(b.type.startsWith("cmd_")){
+      const isL2R=b.brightnessDirection==="L2R";
+      applyBrightness(b,!isL2R);
+    }
+  });
+  updateLegend();
+  output(`🪞 Mirror mode ${mirrorMode?"ON (right brighter)":"OFF (left brighter)"}`);
+}
+
+/* === Dynamic legend update === */
+function updateLegend(){
+  const norm=document.getElementById("legendNormal");
+  const mirr=document.getElementById("legendMirror");
+  if(mirrorMode){
+    norm.style.background="linear-gradient(90deg,#66cc66 0%,#ffffff 100%)";
+    mirr.style.background="linear-gradient(90deg,#ffffff 0%,#66cc66 100%)";
+  }else{
+    norm.style.background="linear-gradient(90deg,#ffffff 0%,#66cc66 100%)";
+    mirr.style.background="linear-gradient(90deg,#66cc66 0%,#ffffff 100%)";
+  }
+}
+</script>
+</body>
+</html>
